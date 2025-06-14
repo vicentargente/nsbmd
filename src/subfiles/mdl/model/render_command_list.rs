@@ -149,21 +149,17 @@ impl RenderCommand {
                 let data = CalculateSkinningEquationData::from_bytes(tail)?;
                 Ok(RenderCommand::CalculateSkinningEquation(Box::new(data)))
             },
-            0x0A => {
+            0x0B => {
                 let data = ScaleData::from_bytes(op_code)?;
                 Ok(RenderCommand::Scale(Box::new(data)))
             },
-            0x0B => {
+            0x0C => {
                 let data = Unknown0x0CData::from_bytes(tail)?;
                 Ok(RenderCommand::Unknown0x0C(Box::new(data)))
-            },
-            0x0C => {
-                let data = Unknown0x0DData::from_bytes(tail)?;
-                Ok(RenderCommand::Unknown0x0D(Box::new(data)))
             },
             0x0D => {
-                let data = Unknown0x0CData::from_bytes(tail)?;
-                Ok(RenderCommand::Unknown0x0C(Box::new(data)))
+                let data = Unknown0x0DData::from_bytes(tail)?;
+                Ok(RenderCommand::Unknown0x0D(Box::new(data)))
             },
             _ => {
                 Err(AppError::new(&format!("Unknown RenderCommand: 0x{:2X}", op_code)))
@@ -244,9 +240,9 @@ impl RenderCommand {
             RenderCommand::Unknown0x07(data) => 0x07 | data.subtype,
             RenderCommand::Unknown0x08(_) => 0x08,
             RenderCommand::CalculateSkinningEquation(_) => 0x09,
-            RenderCommand::Scale(_) => 0x0A,
-            RenderCommand::Unknown0x0C(_) => 0x0B,
-            RenderCommand::Unknown0x0D(_) => 0x0C
+            RenderCommand::Scale(data) => 0x0B | data.subtype,
+            RenderCommand::Unknown0x0C(_) => 0x0C,
+            RenderCommand::Unknown0x0D(_) => 0x0D
         }
     }
 

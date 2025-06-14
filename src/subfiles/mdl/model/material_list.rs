@@ -1,4 +1,4 @@
-use crate::{data_structures::name_list::NameList, debug_info::DebugInfo, error::AppError, traits::BinarySerializable};
+use crate::{data_structures::name_list::NameList, debug_info::DebugInfo, error::AppError, traits::BinarySerializable, util::number::alignment::get_4_byte_alignment};
 
 #[derive(Debug, Clone)]
 pub struct MaterialList {
@@ -29,12 +29,23 @@ impl MaterialList {
         for &offset in materials.data_iter() {
             let offset = offset as usize;
 
-            let material = Material::from_bytes(&bytes[offset..])?;
+            let material = Material::from_bytes(&bytes[offset..], DebugInfo { offset: debug_info.offset + offset as u32 })?;
             materials_data.push(material);
         }
 
-        let texture_pairing_list = TexturePairingList::from_bytes(&bytes[texture_pairings_offset as usize..])?;
-        let palette_pairing_list = PalettePairingList::from_bytes(&bytes[palette_pairings_offset as usize..])?;
+        let mut texture_pairing_list = TexturePairingList::from_bytes(
+            &bytes[texture_pairings_offset as usize..],
+            DebugInfo { offset: debug_info.offset + texture_pairings_offset as u32 }
+        )?;
+
+        let mut palette_pairing_list = PalettePairingList::from_bytes(
+            &bytes[palette_pairings_offset as usize..],
+            DebugInfo { offset: debug_info.offset + palette_pairings_offset as u32 }
+        )?;
+
+        // Read indices for the pairing lists
+        texture_pairing_list.read_indices(bytes)?;
+        palette_pairing_list.read_indices(bytes)?;
 
         Ok(MaterialList {
             texture_pairings_offset,
@@ -64,7 +75,9 @@ impl MaterialList {
 
         self.texture_pairing_list.write_bytes(&mut buffer[self.texture_pairings_offset as usize..])?;
         self.palette_pairing_list.write_bytes(&mut buffer[self.palette_pairings_offset as usize..])?;
-
+        
+        self.texture_pairing_list.write_indices(buffer)?;
+        self.palette_pairing_list.write_indices(buffer)?;
         Ok(())
     }
 
@@ -91,7 +104,14 @@ impl MaterialList {
         self.palette_pairings_offset = offset as u16;
         offset += self.palette_pairing_list.size();
 
-        offset += 4; // Why?
+        // Indices from pairing lists go after all the pairing lists and before the materials. They don't need to be aligned (they are individual bytes)
+        self.texture_pairing_list.set_begin_indices_offset(offset as u16);
+        offset += self.texture_pairing_list.total_indices_count();
+        self.palette_pairing_list.set_begin_indices_offset(offset as u16);
+        offset += self.palette_pairing_list.total_indices_count();
+
+        offset = get_4_byte_alignment(offset); // Material data must be 4-byte aligned
+
         for material_offset in self.materials.data_iter_mut() {
             *material_offset = offset as u32;
             offset += Material::SIZE;
@@ -105,10 +125,10 @@ pub struct Material {
     dummy: u16,
     size: u16,
 
-    dif_amb: u32,
-    spe_emi: u32,
-    polygon_attr: u32,
-    unknown_0: u32,
+    dif_amb: u32, // Value for DIFF_AMB register
+    spe_emi: u32, // Value for SPE_EMI register
+    polygon_attr: u32, // Value for POLYGON_ATTR register
+    unknown_0: u32, // Mask for POLYGON_ATTR register??
     teximage_params: TexImageParams,
 
     unknown_1: u32,
@@ -117,13 +137,16 @@ pub struct Material {
     texture_width: u16,
     texture_height: u16,
 
-    remaining_fields: [u8; 8]
+    remaining_fields: [u8; 8],
+
+    // Debug info
+    _debug_info: DebugInfo
 }
 
 impl Material {
     const SIZE: usize = 44;
 
-    pub fn from_bytes(bytes: &[u8]) -> Result<Material, AppError> {
+    pub fn from_bytes(bytes: &[u8], debug_info: DebugInfo) -> Result<Material, AppError> {
         if bytes.len() < Material::SIZE {
             return Err(AppError::new("Material needs at least 44 bytes"));
         }
@@ -157,7 +180,8 @@ impl Material {
             unknown_2,
             texture_width,
             texture_height,
-            remaining_fields
+            remaining_fields,
+            _debug_info: debug_info
         })
     }
 
@@ -276,16 +300,20 @@ impl TexImageParams {
 
 #[derive(Debug, Clone)]
 pub struct TexturePairingList {
-    texture_pairings: NameList<MaterialIdxList>
+    texture_pairings: NameList<MaterialIdxList>,
+
+    // Debug info
+    _debug_info: DebugInfo
 }
 
 impl TexturePairingList {
-    pub fn from_bytes(bytes: &[u8]) -> Result<TexturePairingList, AppError> {
+    pub fn from_bytes(bytes: &[u8], debug_info: DebugInfo) -> Result<TexturePairingList, AppError> {
         // No bound checks, since NameList has its own checks
         let texture_pairings = NameList::from_bytes(bytes)?;
 
         Ok(TexturePairingList {
-            texture_pairings
+            texture_pairings,
+            _debug_info: debug_info
         })
     }
 
@@ -302,21 +330,59 @@ impl TexturePairingList {
 
     pub fn rebase(&mut self) {
         self.texture_pairings.rebase();
+
+        for pairing in self.texture_pairings.data_iter_mut() {
+            pairing.rebase();
+        }
+    }
+
+    pub fn read_indices(&mut self, material_list_bytes: &[u8]) -> Result<(), AppError> {
+        for pairing in self.texture_pairings.data_iter_mut() {
+            pairing.read_indices(material_list_bytes)?;
+        }
+
+        Ok(())
+    }
+
+    pub fn write_indices(&self, material_list_buffer: &mut [u8]) -> Result<(), AppError> {
+        for pairing in self.texture_pairings.data_iter() {
+            pairing.write_indices(material_list_buffer)?;
+        }
+
+        Ok(())
+    }
+
+    pub fn total_indices_count(&self) -> usize {
+        self.texture_pairings.data_iter()
+            .map(|pairing| pairing.count as usize)
+            .sum()
+    }
+
+    pub fn set_begin_indices_offset(&mut self, offset: u16) {
+        let mut offset = offset;
+        for pairing in self.texture_pairings.data_iter_mut() {
+            pairing.offset = offset;
+            offset += pairing.count as u16;
+        }
     }
 }
 
 
 #[derive(Debug, Clone)]
 pub struct PalettePairingList {
-    palette_pairings: NameList<MaterialIdxList>
+    palette_pairings: NameList<MaterialIdxList>,
+
+    // Debug info
+    _debug_info: DebugInfo
 }
 
 impl PalettePairingList {
-    pub fn from_bytes(bytes: &[u8]) -> Result<PalettePairingList, AppError> {
+    pub fn from_bytes(bytes: &[u8], debug_info: DebugInfo) -> Result<PalettePairingList, AppError> {
         let palette_pairings = NameList::from_bytes(bytes)?;
 
         Ok(PalettePairingList {
-            palette_pairings
+            palette_pairings,
+            _debug_info: debug_info
         })
     }
 
@@ -332,6 +398,40 @@ impl PalettePairingList {
 
     pub fn rebase(&mut self) {
         self.palette_pairings.rebase();
+        
+        for pairing in self.palette_pairings.data_iter_mut() {
+            pairing.rebase();
+        }
+    }
+
+    pub fn read_indices(&mut self, material_list_bytes: &[u8]) -> Result<(), AppError> {
+        for pairing in self.palette_pairings.data_iter_mut() {
+            pairing.read_indices(material_list_bytes)?;
+        }
+
+        Ok(())
+    }
+
+    pub fn write_indices(&self, material_list_buffer: &mut [u8]) -> Result<(), AppError> {
+        for pairing in self.palette_pairings.data_iter() {
+            pairing.write_indices(material_list_buffer)?;
+        }
+
+        Ok(())
+    }
+
+    pub fn total_indices_count(&self) -> usize {
+        self.palette_pairings.data_iter()
+            .map(|pairing| pairing.count as usize)
+            .sum()
+    }
+
+    pub fn set_begin_indices_offset(&mut self, offset: u16) {
+        let mut offset = offset;
+        for pairing in self.palette_pairings.data_iter_mut() {
+            pairing.offset = offset;
+            offset += pairing.count as u16;
+        }
     }
 }
 
@@ -350,6 +450,39 @@ pub struct MaterialIdxList {
 
 impl MaterialIdxList {
     const SIZE: usize = 4; // Offset (2 bytes) + Count (1 byte) + Dummy (1 byte)
+
+    fn read_indices(&mut self, material_list_bytes: &[u8]) -> Result<(), AppError> {
+        if material_list_bytes.len() < (self.offset + self.count as u16) as usize {
+            return Err(AppError::new(&format!("MaterialIdxList needs at least {} bytes from the MaterialList to read indices", self.offset + self.count as u16)));
+        }
+
+        if self.indices.len() > 0 {
+            self.indices.clear(); // Clear previous indices if any (should never happen)
+        }
+
+        for i in 0..self.count {
+            let index = material_list_bytes[self.offset as usize + i as usize];
+            self.indices.push(index);
+        }
+
+        Ok(())
+    }
+
+    fn write_indices(&self, material_list_buffer: &mut [u8]) -> Result<(), AppError> {
+        if material_list_buffer.len() < (self.offset + self.count as u16) as usize {
+            return Err(AppError::new(&format!("MaterialIdxList needs at least {} bytes from the MaterialList to write indices", self.offset + self.count as u16)));
+        }
+
+        for (i, &index) in self.indices.iter().enumerate() {
+            material_list_buffer[self.offset as usize + i] = index;
+        }
+
+        Ok(())
+    }
+
+    pub fn rebase(&mut self) {
+        self.count = self.indices.len() as u8;
+    }
 }
 
 impl BinarySerializable for MaterialIdxList {
@@ -366,13 +499,12 @@ impl BinarySerializable for MaterialIdxList {
             return Err(AppError::new(&format!("MaterialIdxList needs at least {} bytes", offset + count as u16)));
         }
 
-        let indices = bytes[offset as usize..(offset + count as u16) as usize].to_vec();
-
         Ok(MaterialIdxList {
             offset,
             count,
             dummy,
-            indices
+            // As indices offset is from the material list, we cannot read them here
+            indices: Vec::with_capacity(count as usize)
         })
     }
 
@@ -396,7 +528,7 @@ impl BinarySerializable for MaterialIdxList {
         buffer[2] = self.count;
         buffer[3] = self.dummy;
 
-        buffer[self.offset as usize..(self.offset + self.count as u16) as usize].copy_from_slice(&self.indices);
+        // We do not write the indices, as offset is from the material list, not from this struct
 
         Ok(())
     }
