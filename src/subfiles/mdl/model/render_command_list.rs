@@ -613,6 +613,16 @@ pub struct SkinningEquationTerm {
     pub weight: u8
 }
 
+impl SkinningEquationTerm {
+    pub fn weight_f32(&self) -> f32 {
+        self.weight as f32 / 256.0f32
+    }
+
+    pub fn weight_f64(&self) -> f64 {
+        self.weight as f64 / 256.0f64
+    }
+}
+
 impl CalculateSkinningEquationData {
     pub fn from_bytes(data: &[u8]) -> Result<CalculateSkinningEquationData, AppError> {
         if data.len() < 2 {

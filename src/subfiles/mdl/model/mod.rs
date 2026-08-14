@@ -229,6 +229,14 @@ impl Model {
         &mut self.meshes
     }
 
+    pub fn get_material_list(&self) -> &MaterialList {
+        &self.materials
+    }
+
+    pub fn get_material_list_mut(&mut self) -> &mut MaterialList {
+        &mut self.materials
+    }
+
     pub fn get_render_cmds_list(&self) -> &RenderCommandList {
         &self.render_commands
     }
@@ -237,7 +245,7 @@ impl Model {
         &mut self.render_commands
     }
 
-    pub fn get_render_command_executor(&self) -> ModelRenderCmdExecutor {
+    pub fn get_render_command_executor(&self) -> ModelRenderCmdExecutor<'_> {
         ModelRenderCmdExecutor::new(&self.render_commands, &self.bone_list)
     }
 }

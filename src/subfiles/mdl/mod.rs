@@ -116,7 +116,19 @@ impl Mdl {
         self.filesize as usize
     }
 
+    pub fn get_model(&self, index: usize) -> Option<&Model> {
+        self.models_data.get(index)
+    }
+
     pub fn get_model_mut(&mut self, index: usize) -> Option<&mut Model> {
         self.models_data.get_mut(index)
+    }
+
+    pub fn model_iter(&self) -> impl Iterator<Item = &Model> {
+        self.models_data.iter()
+    }
+
+    pub fn model_iter_mut(&mut self) -> impl Iterator<Item = &mut Model> {
+        self.models_data.iter_mut()
     }
 }
