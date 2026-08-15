@@ -1,3 +1,5 @@
+use std::{ops::Index, slice::SliceIndex};
+
 use crate::{debug_info::DebugInfo, error::AppError};
 
 const COMMAND_CODE_MASK: u8 = 0x1F;
@@ -89,6 +91,15 @@ impl RenderCommandList {
     }
 }
 
+impl<Idx> Index<Idx> for RenderCommandList
+where Idx: SliceIndex<[RenderCommand]>
+{
+    type Output = Idx::Output;
+
+    fn index(&self, index: Idx) -> &Self::Output {
+        &self.render_commands[index]
+    }
+}
 
 #[derive(Debug, Clone)]
 pub enum RenderCommand {
