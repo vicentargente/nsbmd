@@ -246,6 +246,12 @@ impl Model {
     }
 
     pub fn get_render_command_executor(&self) -> ModelRenderCmdExecutor<'_> {
-        ModelRenderCmdExecutor::new(&self.render_commands, &self.bone_list)
+        ModelRenderCmdExecutor::new(
+            &self.render_commands,
+            &self.bone_list,
+            &self.inv_binds_matrices,
+            self.upscale.to_f32(),
+            self.downscale.to_f32()
+        )
     }
 }

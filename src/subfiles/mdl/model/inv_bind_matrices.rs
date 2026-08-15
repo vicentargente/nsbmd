@@ -1,4 +1,4 @@
-use crate::{debug_info::DebugInfo, error::AppError, util::number::fixed_point::fixed_1_19_12::Fixed1_19_12};
+use crate::{debug_info::DebugInfo, error::AppError, util::{math::matrix::Matrix, number::fixed_point::fixed_1_19_12::Fixed1_19_12}};
 
 #[derive(Debug, Clone)]
 pub struct InvBindMatrices {
@@ -42,6 +42,10 @@ impl InvBindMatrices {
 
     pub fn size(&self) -> usize {
         self.matrices.len() * InvBindMatrix::SIZE
+    }
+
+    pub fn get(&self, index: usize) -> Option<&InvBindMatrix> {
+        self.matrices.get(index)
     }
 }
 
@@ -119,5 +123,15 @@ impl InvBindMatrix {
         );
 
         Ok(())
+    }
+
+    pub fn to_matrix(&self) -> Matrix {
+        let p = &self.position_matrix;
+        Matrix::new(4, 4, vec![
+            p[0].to_f32(), p[3].to_f32(), p[6].to_f32(), p[9].to_f32(),
+            p[1].to_f32(), p[4].to_f32(), p[7].to_f32(), p[10].to_f32(),
+            p[2].to_f32(), p[5].to_f32(), p[8].to_f32(), p[11].to_f32(),
+            0.0,           0.0,           0.0,           1.0,
+        ]).unwrap()
     }
 }

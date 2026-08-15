@@ -1,9 +1,12 @@
-use crate::{error::AppError, subfiles::mdl::model::{bone_list::BoneList, render_command_list::{RenderCommand, RenderCommandList}}, util::math::matrix::Matrix};
+use crate::{error::AppError, subfiles::mdl::model::{bone_list::BoneList, inv_bind_matrices::{self, InvBindMatrices}, render_command_list::{RenderCommand, RenderCommandList}}, util::math::matrix::Matrix};
 
 // State machine to execute model render commands
 pub struct ModelRenderCmdExecutor<'a> {
     render_cmds: &'a RenderCommandList,
     bone_list: &'a BoneList,
+    inv_bind_matrices: &'a InvBindMatrices,
+    upscale: f32,
+    downscale: f32,
 
     // Internal state for the executor
     matrix_stack: Vec<Matrix>, // Visit https://problemkaputt.de/gbatek.htm#ds3dvideo (DS 3D Matrix Stack) for more info
@@ -14,7 +17,13 @@ pub struct ModelRenderCmdExecutor<'a> {
 }
 
 impl ModelRenderCmdExecutor<'_> {
-    pub fn new<'a>(render_cmds: &'a RenderCommandList, bone_list: &'a BoneList) -> ModelRenderCmdExecutor<'a> {
+    pub fn new<'a>(
+        render_cmds: &'a RenderCommandList,
+        bone_list: &'a BoneList,
+        inv_bind_matrices: &'a InvBindMatrices,
+        upscale: f32,
+        downscale: f32
+    ) -> ModelRenderCmdExecutor<'a> {
         let matrix_stack = vec![Matrix::identity(4); 31]; // 0..30 (31 entries)
         let current_matrix = Matrix::identity(4); // Initial current matrix
 
@@ -23,6 +32,9 @@ impl ModelRenderCmdExecutor<'_> {
         ModelRenderCmdExecutor {
             render_cmds,
             bone_list,
+            inv_bind_matrices,
+            upscale,
+            downscale,
             matrix_stack,
             current_matrix,
             loaded_bones_in_matrix
@@ -107,13 +119,70 @@ impl ModelRenderCmdExecutor<'_> {
             },
             RenderCommand::Unknown0x07(_unknown0x07_data) => { /* Unknown */ },
             RenderCommand::Unknown0x08(_unknown0x08_data) => { /* Unknown */ },
-            RenderCommand::CalculateSkinningEquation(_calculate_skinning_equation_data) => {
-                // TODO: Implement skinning equation calculation logic
-                println!("WARNING: CalculateSkinningEquation command is not implemented yet.");
+            RenderCommand::CalculateSkinningEquation(data) => {
+                let store_index = data.store_index as usize;
+                if store_index >= self.matrix_stack.len() {
+                    return Err(AppError::new(&format!(
+                        "CalculateSkinningEquation::Invalid store index {}", store_index
+                    )));
+                }
+
+                // Accumulator matrix for the blended transform
+                let mut blended_matrix = Matrix::zeros(4, 4);
+
+                for term in data.terms.iter() {
+                    let matrix_idx = term.matrix_index as usize;
+                    if matrix_idx >= self.matrix_stack.len() {
+                        return Err(AppError::new(&format!(
+                            "CalculateSkinningEquation::Invalid matrix index {}", matrix_idx
+                        )));
+                    }
+
+                    let inv_bind = self.inv_bind_matrices
+                        .get(term.inv_bind_index as usize)
+                        .ok_or_else(|| AppError::new(&format!(
+                            "CalculateSkinningEquation::InvBind index {} not found", term.inv_bind_index
+                        )))?
+                        .to_matrix();
+
+                    // World transform for this bone * Inverse Bind Matrix
+                    let bone_world = &self.matrix_stack[matrix_idx];
+                    let term_matrix = bone_world.clone() * inv_bind;
+                    let weight = term.weight_f32();
+
+                    // Add weighted term matrix
+                    for r in 0..4 {
+                        for c in 0..4 {
+                            let curr = blended_matrix.get(r, c)?;
+                            let term_val = term_matrix.get(r, c)?;
+                            blended_matrix.set(r, c, curr + term_val * weight)?;
+                        }
+                    }
+                }
+
+                // Preserve affine homogeneous coordinates
+                blended_matrix.set(3, 3, 1.0)?;
+
+                self.matrix_stack[store_index] = blended_matrix;
+                self.loaded_bones_in_matrix[store_index] = Some(format!("SkinBlend_{}", store_index));
             },
-            RenderCommand::Scale(_scale_data) => {
-                // TODO: Implement scaling logic
-                // It uses the model scale factor to scale the current matrix
+            RenderCommand::Scale(scale_data) => {
+                let scale_factor = match scale_data.subtype {
+                    0x00 => self.upscale,
+                    0x20 => self.downscale,
+                    _ => return Err(AppError::new(&format!(
+                        "Scale::Unknown subtype: 0x{:02X}", scale_data.subtype
+                    ))),
+                };
+
+                let scale_matrix = Matrix::new(4, 4, vec![
+                    scale_factor, 0.0,          0.0,          0.0,
+                    0.0,          scale_factor, 0.0,          0.0,
+                    0.0,          0.0,          scale_factor, 0.0,
+                    0.0,          0.0,          0.0,          1.0,
+                ])?;
+
+                self.current_matrix = self.current_matrix.clone() * scale_matrix;
             },
             RenderCommand::Unknown0x0C(_unknown0x0c_data) => { /* Unknown */ },
             RenderCommand::Unknown0x0D(_unknown0x0d_data) => { /* Unknown */ },
