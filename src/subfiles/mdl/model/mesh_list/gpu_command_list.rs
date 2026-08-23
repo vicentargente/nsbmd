@@ -14,6 +14,12 @@ pub struct GpuCommandList {
 }
 
 impl GpuCommandList {
+    pub fn from_commands(render_cmds: Vec<GpuCommand>) -> Self {
+        GpuCommandList {
+            render_cmds,
+        }
+    }
+
     pub fn from_bytes(bytes: &[u8]) -> Result<GpuCommandList, AppError> {
         if bytes.len() < 4 {
             return Err(AppError::new("GpuCommandList needs at least 4 bytes"));
@@ -113,6 +119,10 @@ impl GpuCommandList {
 
     pub fn iter(&self) -> impl Iterator<Item = &GpuCommand> {
         self.render_cmds.iter()
+    }
+
+    pub fn len(&self) -> usize {
+        self.render_cmds.len()
     }
 }
 

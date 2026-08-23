@@ -205,12 +205,28 @@ impl Container {
         self.files.mdl.get_mut(index)
     }
 
+    pub fn mdl_iter(&self) -> impl Iterator<Item = &Mdl> {
+        self.files.mdl.iter()
+    }
+
+    pub fn mdl_iter_mut(&mut self) -> impl Iterator<Item = &mut Mdl> {
+        self.files.mdl.iter_mut()
+    }
+
     pub fn get_tex(&self, index: usize) -> Option<&Tex> {
         self.files.tex.get(index)
     }
 
     pub fn get_tex_mut(&mut self, index: usize) -> Option<&mut Tex> {
         self.files.tex.get_mut(index)
+    }
+
+    pub fn tex_iter(&self) -> impl Iterator<Item = &Tex> {
+        self.files.tex.iter()
+    }
+
+    pub fn tex_iter_mut(&mut self) -> impl Iterator<Item = &mut Tex> {
+        self.files.tex.iter_mut()
     }
 }
 

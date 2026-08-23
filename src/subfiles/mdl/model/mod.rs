@@ -205,6 +205,21 @@ impl Model {
         &mut self.bone_list
     }
 
+    pub fn upscale(&self) -> Fixed1_19_12 {
+        self.upscale
+    }
+
+    pub fn downscale(&self) -> Fixed1_19_12 {
+        self.downscale
+    }
+
+    pub fn set_geometry_counts(&mut self, num_verts: u16, num_polys: u16, num_tris: u16, num_quads: u16) {
+        self.num_verts = num_verts;
+        self.num_polys = num_polys;
+        self.num_tris = num_tris;
+        self.num_quads = num_quads;
+    }
+
     pub fn get_bounding_box(&self) -> &BoundingBox {
         &self.bounding_box
     }
@@ -229,6 +244,14 @@ impl Model {
         &mut self.meshes
     }
 
+    pub fn get_material_list(&self) -> &MaterialList {
+        &self.materials
+    }
+
+    pub fn get_material_list_mut(&mut self) -> &mut MaterialList {
+        &mut self.materials
+    }
+
     pub fn get_render_cmds_list(&self) -> &RenderCommandList {
         &self.render_commands
     }
@@ -237,7 +260,13 @@ impl Model {
         &mut self.render_commands
     }
 
-    pub fn get_render_command_executor(&self) -> ModelRenderCmdExecutor {
-        ModelRenderCmdExecutor::new(&self.render_commands, &self.bone_list)
+    pub fn get_render_command_executor(&self) -> ModelRenderCmdExecutor<'_> {
+        ModelRenderCmdExecutor::new(
+            &self.render_commands,
+            &self.bone_list,
+            &self.inv_binds_matrices,
+            self.upscale.to_f32(),
+            self.downscale.to_f32()
+        )
     }
 }

@@ -1,3 +1,5 @@
+use std::{ops::Index, slice::SliceIndex};
+
 use crate::{debug_info::DebugInfo, error::AppError};
 
 const COMMAND_CODE_MASK: u8 = 0x1F;
@@ -89,6 +91,15 @@ impl RenderCommandList {
     }
 }
 
+impl<Idx> Index<Idx> for RenderCommandList
+where Idx: SliceIndex<[RenderCommand]>
+{
+    type Output = Idx::Output;
+
+    fn index(&self, index: Idx) -> &Self::Output {
+        &self.render_commands[index]
+    }
+}
 
 #[derive(Debug, Clone)]
 pub enum RenderCommand {
@@ -611,6 +622,16 @@ pub struct SkinningEquationTerm {
     pub matrix_index: u8, // Matrix stack index for local-to-world (model matrix)
     pub inv_bind_index: u8, // Index in the InvBindMatrix for bind matrix
     pub weight: u8
+}
+
+impl SkinningEquationTerm {
+    pub fn weight_f32(&self) -> f32 {
+        self.weight as f32 / 256.0f32
+    }
+
+    pub fn weight_f64(&self) -> f64 {
+        self.weight as f64 / 256.0f64
+    }
 }
 
 impl CalculateSkinningEquationData {

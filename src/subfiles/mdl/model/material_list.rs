@@ -1,4 +1,6 @@
-use crate::{data_structures::name_list::NameList, debug_info::DebugInfo, error::AppError, traits::BinarySerializable, util::number::alignment::get_4_byte_alignment};
+use std::{ops::Index, slice::SliceIndex};
+
+use crate::{data_structures::{name::Name, name_list::NameList}, debug_info::DebugInfo, error::AppError, traits::BinarySerializable, util::number::alignment::get_4_byte_alignment};
 
 #[derive(Debug, Clone)]
 pub struct MaterialList {
@@ -117,8 +119,53 @@ impl MaterialList {
             offset += Material::SIZE;
         }
     }
+
+    pub fn len(&self) -> usize {
+        self.materials_data.len()
+    }
+
+    pub fn get(&self, index: usize) -> Option<&Material> {
+        self.materials_data.get(index)
+    }
+
+    pub fn get_mut(&mut self, index: usize) -> Option<&mut Material> {
+        self.materials_data.get_mut(index)
+    }
+
+    pub fn get_name(&self, index: usize) -> Option<&Name> {
+        self.materials.get_name(index)
+    }
+
+    pub fn get_name_mut(&mut self, index: usize) -> Option<&mut Name> {
+        self.materials.get_name_mut(index)
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = &Material> {
+        self.materials_data.iter()
+    }
+
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut Material> {
+        self.materials_data.iter_mut()
+    }
+
+    pub fn names_iter(&self) -> impl Iterator<Item = &Name> {
+        self.materials.names_iter()
+    }
+
+    pub fn names_iter_mut(&mut self) -> impl Iterator<Item = &mut Name> {
+        self.materials.names_iter_mut()
+    }
 }
 
+impl<Idx> Index<Idx> for MaterialList
+where Idx: SliceIndex<[Material]>
+{
+    type Output = Idx::Output;
+
+    fn index(&self, index: Idx) -> &Self::Output {
+        &self.materials_data[index]
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct Material {
@@ -208,6 +255,14 @@ impl Material {
         buffer[36..44].copy_from_slice(&self.remaining_fields);
 
         Ok(())
+    }
+
+    pub fn texture_width(&self) -> u16 {
+        self.texture_width
+    }
+
+    pub fn texture_height(&self) -> u16 {
+        self.texture_height
     }
 }
 
