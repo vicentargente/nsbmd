@@ -56,12 +56,12 @@ impl ModelRenderCmdExecutor<'_> {
         Ok(())
     }
 
-    pub fn execute_until_next_mesh_draw(&mut self) -> Result<(), AppError> {
+    pub fn execute_until_next_mesh_draw(&mut self) -> Result<u8, AppError> {
         for cmd in self.render_cmds[self.iter_index..].iter() {
             self.iter_index += 1;
 
-            if let RenderCommand::DrawMesh(_) = cmd {
-                return Ok(()); // Stop execution when we reach a DrawMesh command
+            if let RenderCommand::DrawMesh(draw_mesh_data) = cmd {
+                return Ok(draw_mesh_data.mesh_index); // Stop execution and return drawn mesh index
             }
 
             self.execute_command(cmd)?;
@@ -72,6 +72,14 @@ impl ModelRenderCmdExecutor<'_> {
 
     pub fn matrix_stack(&self) -> &Vec<Matrix> {
         &self.matrix_stack
+    }
+
+    pub fn current_matrix(&self) -> &Matrix {
+        &self.current_matrix
+    }
+
+    pub fn current_material_index(&self) -> u8 {
+        self.current_material_index
     }
 
     pub fn loaded_bones_in_matrix(&self) -> &Vec<Option<SkinBlendSignature>> {

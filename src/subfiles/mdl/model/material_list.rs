@@ -256,6 +256,14 @@ impl Material {
 
         Ok(())
     }
+
+    pub fn texture_width(&self) -> u16 {
+        self.texture_width
+    }
+
+    pub fn texture_height(&self) -> u16 {
+        self.texture_height
+    }
 }
 
 #[derive(Debug, Clone, Copy)]

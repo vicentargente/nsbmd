@@ -44,12 +44,36 @@ impl MeshList {
     }
 
     pub fn size(&self) -> usize {
-        self.meshes.size() + self.mesh_data.iter().map(|m| m.size()).sum::<usize>()
+        self.meshes.size() + self.mesh_data.len() * Mesh::SIZE + self.mesh_data.iter().map(|m| m.render_cmds_list.size()).sum::<usize>()
+    }
+
+    pub fn len(&self) -> usize {
+        self.mesh_data.len()
+    }
+
+    pub fn names_iter(&self) -> impl Iterator<Item = &crate::data_structures::name::Name> {
+        self.meshes.names_iter()
+    }
+
+    pub fn get_name(&self, index: usize) -> Option<&crate::data_structures::name::Name> {
+        self.meshes.get_name(index)
     }
 
     pub fn rebase(&mut self) {
-        for mesh in self.mesh_data.iter_mut() {
-            mesh.rebase();
+        self.meshes.rebase();
+
+        let base_offset = self.meshes.size();
+        let num_meshes = self.mesh_data.len();
+        let mut current_cmds_abs_offset = base_offset + num_meshes * Mesh::SIZE;
+
+        for (i, (offset, mesh)) in self.meshes.data_iter_mut().zip(self.mesh_data.iter_mut()).enumerate() {
+            let mesh_header_offset = base_offset + i * Mesh::SIZE;
+            *offset = mesh_header_offset as u32;
+
+            mesh.cmds_offset = (current_cmds_abs_offset - mesh_header_offset) as u32;
+            mesh.cmds_len = mesh.render_cmds_list.size() as u32;
+
+            current_cmds_abs_offset += mesh.cmds_len as usize;
         }
     }
 
@@ -139,6 +163,19 @@ impl Mesh {
 
     pub fn size(&self) -> usize {
         Mesh::SIZE + self.render_cmds_list.size()
+    }
+
+    pub fn cmds_offset(&self) -> u32 {
+        self.cmds_offset
+    }
+
+    pub fn cmds_len(&self) -> u32 {
+        self.cmds_len
+    }
+
+    pub fn set_render_cmds_list(&mut self, cmds: GpuCommandList) {
+        self.render_cmds_list = cmds;
+        self.rebase();
     }
 
     pub fn get_render_cmds_list(&self) -> &GpuCommandList {

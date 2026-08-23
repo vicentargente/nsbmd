@@ -205,6 +205,21 @@ impl Model {
         &mut self.bone_list
     }
 
+    pub fn upscale(&self) -> Fixed1_19_12 {
+        self.upscale
+    }
+
+    pub fn downscale(&self) -> Fixed1_19_12 {
+        self.downscale
+    }
+
+    pub fn set_geometry_counts(&mut self, num_verts: u16, num_polys: u16, num_tris: u16, num_quads: u16) {
+        self.num_verts = num_verts;
+        self.num_polys = num_polys;
+        self.num_tris = num_tris;
+        self.num_quads = num_quads;
+    }
+
     pub fn get_bounding_box(&self) -> &BoundingBox {
         &self.bounding_box
     }
